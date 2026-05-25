@@ -1,5 +1,6 @@
 import sys
 from lexer import CompilerLexer
+from parser import CompilerParser
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
@@ -10,5 +11,6 @@ if __name__ == '__main__':
         source = f.read()
 
     lexer = CompilerLexer()
-    for tok in lexer.tokenize(source):
-        print(tok)
+    parser = CompilerParser()
+    result = parser.parse(lexer.tokenize(source))
+    print(result)
