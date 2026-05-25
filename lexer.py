@@ -2,83 +2,104 @@ from sly import Lexer
 
 class CompilerLexer(Lexer):
 
-    # Palabras reservadas
+    # ─── Tokens ───────────────────────────────────────────────
     tokens = {
-        PROGRAM, MAIN, VAR, INT, FLOAT, STRING,
-        BEGIN, END,
-        IF, THEN, ELSE,
-        FOR, WHILE, DO,
-        WRITELN,
-        AND, OR,
-        ID,
-        INT_LIT, FLOAT_LIT, STR_LIT,
-        ASSIGN,
-        OP_INC, OP_DEC,
-        OP_GTE, OP_LTE, OP_EQ, OP_NEQ,
-        OP_GT, OP_LT,
-        OP_SUM, OP_SUB, OP_MUL, OP_DIV,
-        LBRACE, RBRACE,
-        LPAREN, RPAREN,
+        # Palabras reservadas
+        PROGRAM, VAR, INT, FLOAT, BEGIN, END,
+        IF, THEN, ELSE, WHILE, DO, FOR, WRITE, AND,
+        FUNCTION,
+
+        # Identificadores y literales
+        ID, NUM_FLOAT, NUM_INT, STRING,
+
+        # Operadores de asignación y unarios
+        ASSIGN, DECREMENT, INCREMENT,
+
+        # Operadores relacionales
+        GTE, GT, LT,
+
+        # Operadores aritméticos
+        PLUS, MINUS, TIMES,
+
+        # Delimitadores
         SEMICOLON, COLON, COMMA,
+        LPAREN, RPAREN,
+        LBRACE, RBRACE,
+        LBRACKET, RBRACKET,
     }
 
-    # Ignorar espacios y saltos de línea
-    ignore = ' \t\r\n'
+    # ─── Ignorar espacios y saltos de línea ───────────────────
+    ignore = ' \t'
 
-    # Palabras reservadas (se revisan antes que ID)
-    PROGRAM  = r'program'
-    MAIN     = r'main'
-    VAR      = r'var'
-    INT      = r'int'
-    FLOAT    = r'float'
-    STRING   = r'string'
-    BEGIN    = r'begin'
-    END      = r'end'
-    IF       = r'if'
-    THEN     = r'then'
-    ELSE     = r'else'
-    FOR      = r'for'
-    WHILE    = r'while'
-    DO       = r'do'
-    WRITELN  = r'writeln'
-    AND      = r'and'
-    OR       = r'or'
+    @_(r'\n+')
+    def ignore_newline(self, t):
+        self.lineno += t.value.count('\n')
 
-    # Identificador (debe ir DESPUÉS de las palabras reservadas)
-    ID = r'[a-zA-Z_][a-zA-Z0-9_]*'
+    # ─── Ignorar comentarios de línea (//) ────────────────────
+    ignore_comment = r'//.*'
 
-    # Literales
-    FLOAT_LIT = r'\d+\.\d+'
-    INT_LIT   = r'\d+'
-    STR_LIT   = r'"[^"]*"'
+    # ─── Palabras reservadas ──────────────────────────────────
+    # Deben ir ANTES que ID para que SLY las reconozca primero
+    ID['program']   = PROGRAM
+    ID['var']       = VAR
+    ID['int']       = INT
+    ID['float']     = FLOAT
+    ID['begin']     = BEGIN
+    ID['end']       = END
+    ID['if']        = IF
+    ID['then']      = THEN
+    ID['else']      = ELSE
+    ID['while']     = WHILE
+    ID['do']        = DO
+    ID['for']       = FOR
+    ID['write']     = WRITE
+    ID['and']       = AND
+    ID['function']  = FUNCTION
 
-    # Operadores de dos caracteres (van antes que los de uno)
-    OP_INC  = r'\+\+'
-    OP_DEC  = r'--'
-    OP_GTE  = r'>='
-    OP_LTE  = r'<='
-    OP_EQ   = r'=='
-    OP_NEQ  = r'!='
-    ASSIGN  = r':='
+    # ─── Literales ────────────────────────────────────────────
+    # NUM_FLOAT antes que NUM_INT para que no consuma solo la parte entera
+    @_(r'\d+\.\d*')
+    def NUM_FLOAT(self, t):
+        t.value = float(t.value)
+        return t
 
-    # Operadores de un carácter
-    OP_GT  = r'>'
-    OP_LT  = r'<'
-    OP_SUM = r'\+'
-    OP_SUB = r'-'
-    OP_MUL = r'\*'
-    OP_DIV = r'/'
+    @_(r'\d+')
+    def NUM_INT(self, t):
+        t.value = int(t.value)
+        return t
 
-    # Delimitadores
-    LBRACE    = r'\{'
-    RBRACE    = r'\}'
-    LPAREN    = r'\('
-    RPAREN    = r'\)'
-    SEMICOLON = r';'
-    COLON     = r':'
-    COMMA     = r','
+    @_(r'[a-zA-Z_][a-zA-Z0-9_]*')
+    def ID(self, t):
+        return t
 
+    @_(r'"[^"]*"')
+    def STRING(self, t):
+        t.value = t.value[1:-1]  # quita las comillas
+        return t
+
+    # ─── Operadores (los de 2 chars ANTES que los de 1 char) ──
+    ASSIGN      = r':='
+    DECREMENT   = r'--'
+    INCREMENT   = r'\+\+'
+    GTE         = r'>='
+    GT          = r'>'
+    LT          = r'<'
+    PLUS        = r'\+'
+    MINUS       = r'-'
+    TIMES       = r'\*'
+
+    # ─── Delimitadores ────────────────────────────────────────
+    SEMICOLON   = r';'
+    COLON       = r':'
+    COMMA       = r','
+    LPAREN      = r'\('
+    RPAREN      = r'\)'
+    LBRACE      = r'\{'
+    RBRACE      = r'\}'
+    LBRACKET    = r'\['
+    RBRACKET    = r'\]'
+
+    # ─── Manejo de errores ────────────────────────────────────
     def error(self, t):
-        print(f"[LÉXICO] Carácter ilegal: '{t.value[0]}' en posición {self.index}")
+        print(f'[Lexer] Línea {self.lineno}: carácter ilegal "{t.value[0]}"')
         self.index += 1
-        

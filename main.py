@@ -1,18 +1,14 @@
+import sys
 from lexer import CompilerLexer
-from parser import CompilerParser
 
-lexer  = CompilerLexer()
-parser = CompilerParser()
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print('Uso: python main.py <archivo>')
+        sys.exit(1)
 
-code = '''
-program main{
-    var a,b : int;
-    begin;
-        a := 5;
-        b := a + 3;
-        writeln("hola");
-    end;
-}
-'''
+    with open(sys.argv[1], 'r') as f:
+        source = f.read()
 
-parser.parse(lexer.tokenize(code))
+    lexer = CompilerLexer()
+    for tok in lexer.tokenize(source):
+        print(tok)
