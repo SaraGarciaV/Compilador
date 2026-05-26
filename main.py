@@ -3,13 +3,14 @@ from lexer import CompilerLexer
 from parser import CompilerParser
 from semantic import AnalizadorSemantico
 from codegen import GeneradorCodigo
+from evaluator import Evaluador
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print('Uso: python main.py <archivo>')
         sys.exit(1)
 
-    with open(sys.argv[1], 'r') as f:
+    with open(sys.argv[1], 'r', encoding='utf-8') as f:
         source = f.read()
 
     lexer  = CompilerLexer()
@@ -22,3 +23,9 @@ if __name__ == '__main__':
     if not semantico.errores:
         codegen = GeneradorCodigo()
         codegen.generar(ast)
+
+        evaluador = Evaluador(semantico.tabla.tabla)
+        evaluador.ejecutar(codegen.cuadruplos)
+
+
+    
