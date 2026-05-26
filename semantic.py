@@ -74,7 +74,7 @@ class AnalizadorSemantico:
         self._analizar_bloque(bloque)
         self.tabla.imprimir()
         if not self.errores:
-            print('\n Análisis semántico completado sin errores.')
+            print('\n Análisis semántico ')
         else:
             print(f'\n Se encontraron {len(self.errores)} error(es) semántico(s).')
 
