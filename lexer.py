@@ -7,7 +7,7 @@ class CompilerLexer(Lexer):
         # Palabras reservadas
         PROGRAM, VAR, INT, FLOAT, BEGIN, END,
         IF, THEN, ELSE, WHILE, DO, FOR, WRITE, AND,
-        FUNCTION,
+        FUNCTION, RETURN,
 
         # Identificadores y literales
         ID, NUM_FLOAT, NUM_INT, STRING,
@@ -15,11 +15,11 @@ class CompilerLexer(Lexer):
         # Operadores de asignación y unarios
         ASSIGN, DECREMENT, INCREMENT,
 
-        # Operadores relacionales
-        GTE, GT, LT,
+        # Operadores relacionales y lógicos
+        GTE, GT, LT, LTE, EQ, NE, OR,
 
         # Operadores aritméticos
-        PLUS, MINUS, TIMES,
+        PLUS, MINUS, TIMES, DIVIDE, MOD,
 
         # Delimitadores
         SEMICOLON, COLON, COMMA,
@@ -55,6 +55,7 @@ class CompilerLexer(Lexer):
     ID['write']     = WRITE
     ID['and']       = AND
     ID['function']  = FUNCTION
+    ID['return']    = RETURN
 
     # ─── Literales ────────────────────────────────────────────
     # NUM_FLOAT antes que NUM_INT para que no consuma solo la parte entera
@@ -78,15 +79,21 @@ class CompilerLexer(Lexer):
         return t
 
     # ─── Operadores (los de 2 chars ANTES que los de 1 char) ──
+    EQ          = r'=='
+    NE          = r'!='
+    OR          = r'\|\|'
     ASSIGN      = r':='
     DECREMENT   = r'--'
     INCREMENT   = r'\+\+'
     GTE         = r'>='
+    LTE         = r'<='
     GT          = r'>'
     LT          = r'<'
     PLUS        = r'\+'
-    MINUS       = r'-'
+    MINUS       = r'-'   # El unario se maneja en las reglas de precedencia del Parser
     TIMES       = r'\*'
+    DIVIDE      = r'/'
+    MOD         = r'%'
 
     # ─── Delimitadores ────────────────────────────────────────
     SEMICOLON   = r';'

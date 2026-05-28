@@ -1,29 +1,77 @@
 from sly import Parser
 from lexer import CompilerLexer
 
-
 class CompilerParser(Parser):
     tokens = CompilerLexer.tokens
 
     # ─── Precedencia de operadores (menor a mayor) ────────────
     precedence = (
+        ('left', OR),
         ('left', AND),
-        ('left', LT, GT, GTE),
+        ('left', EQ, NE),
+        ('left', LT, GT, GTE, LTE),
         ('left', PLUS, MINUS),
-        ('left', TIMES),
+        ('left', TIMES, DIVIDE, MOD),
+        ('right', UNARY_MINUS),
     )
 
     # ══════════════════════════════════════════════════════════
     # PROGRAMA
     # ══════════════════════════════════════════════════════════
 
-    @_('PROGRAM ID LBRACE var_list bloque RBRACE')
+    @_('PROGRAM ID LBRACE declaraciones bloque RBRACE')
     def programa(self, p):
-        return ('programa', p.ID, p.var_list, p.bloque)
+        funciones = [d for d in p.declaraciones if d[0] == 'funcion']
+        variables = [d for d in p.declaraciones if d[0] == 'variables']
+        return ('programa', p.ID, funciones, variables, p.bloque)
 
-    @_('PROGRAM ID LBRACE bloque RBRACE')
-    def programa(self, p):
-        return ('programa', p.ID, [], p.bloque)
+    @_('declaraciones var_o_funcion')
+    def declaraciones(self, p):
+        return p.declaraciones + [p.var_o_funcion]
+
+    @_('')
+    def declaraciones(self, p):
+        return []
+
+    @_('variables')
+    def var_o_funcion(self, p):
+        return p.variables
+
+    @_('funcion')
+    def var_o_funcion(self, p):
+        return p.funcion
+
+    # ══════════════════════════════════════════════════════════
+    # FUNCIONES
+    # ══════════════════════════════════════════════════════════
+
+    @_('FUNCTION ID LPAREN parametros RPAREN LBRACE bloque RBRACE')
+    def funcion(self, p):
+        return ('funcion', p.ID, p.parametros, p.bloque)
+
+    # ══════════════════════════════════════════════════════════
+    # PARÁMETROS
+    # ══════════════════════════════════════════════════════════
+
+    @_('parametro_lista')
+    def parametros(self, p):
+        return p.parametro_lista
+
+    @_('')
+    def parametros(self, p):
+        return []
+
+    @_('parametro_lista COMMA parametro')
+    def parametro_lista(self, p):
+        return p.parametro_lista + [p.parametro]
+
+    @_('parametro')
+    def parametro_lista(self, p):
+        return [p.parametro]
+
+    @_('ID COLON tipo')
+    def parametro(self, p):
+        return ('parametro', p.ID, p.tipo)
 
     # ══════════════════════════════════════════════════════════
     # DECLARACIÓN DE VARIABLES
@@ -69,9 +117,13 @@ class CompilerParser(Parser):
     # BLOQUE begin...end
     # ══════════════════════════════════════════════════════════
 
+    @_('BEGIN SEMICOLON var_list statement_list END SEMICOLON')
+    def bloque(self, p):
+        return ('bloque', p.var_list, p.statement_list)
+
     @_('BEGIN SEMICOLON statement_list END SEMICOLON')
     def bloque(self, p):
-        return ('bloque', p.statement_list)
+        return ('bloque', [], p.statement_list)
 
     # ══════════════════════════════════════════════════════════
     # LISTA DE STATEMENTS
@@ -116,9 +168,12 @@ class CompilerParser(Parser):
     @_('write_stat')
     def statement(self, p):
         return p.write_stat
-
+    
+    @_('ID LPAREN argumentos RPAREN SEMICOLON')
+    def statement(self, p):
+        return ('llamada', p.ID, p.argumentos)
     # ══════════════════════════════════════════════════════════
-    # ASIGNACIÓN  id := expr ;  o  id[expr] := expr ;
+    # ASIGNACIÓN
     # ══════════════════════════════════════════════════════════
 
     @_('ID LBRACKET expresion RBRACKET ASSIGN expresion SEMICOLON')
@@ -130,7 +185,7 @@ class CompilerParser(Parser):
         return ('asignacion', p.ID, p.expresion)
 
     # ══════════════════════════════════════════════════════════
-    # DECREMENTO  id-- ;   INCREMENTO  id++ ;
+    # DECREMENTO / INCREMENTO
     # ══════════════════════════════════════════════════════════
 
     @_('ID DECREMENT SEMICOLON')
@@ -157,61 +212,72 @@ class CompilerParser(Parser):
     # IF
     # ══════════════════════════════════════════════════════════
 
-    @_('IF LPAREN condicion RPAREN THEN LBRACE statement_list RBRACE ELSE LBRACE statement_list RBRACE')
+    @_('IF LPAREN expresion RPAREN THEN LBRACE statement_list RBRACE ELSE LBRACE statement_list RBRACE')
     def if_stat(self, p):
-        return ('if', p.condicion, p.statement_list0, p.statement_list1)
+        return ('if', p.expresion, p.statement_list0, p.statement_list1)
 
-    @_('IF LPAREN condicion RPAREN THEN LBRACE statement_list RBRACE')
+    @_('IF LPAREN expresion RPAREN THEN LBRACE statement_list RBRACE')
     def if_stat(self, p):
-        return ('if', p.condicion, p.statement_list, None)
+        return ('if', p.expresion, p.statement_list, None)
 
     # ══════════════════════════════════════════════════════════
     # WHILE
     # ══════════════════════════════════════════════════════════
 
-    @_('WHILE LPAREN condicion RPAREN DO LBRACE statement_list RBRACE')
+    @_('WHILE LPAREN expresion RPAREN DO LBRACE statement_list RBRACE')
     def while_stat(self, p):
-        return ('while', p.condicion, p.statement_list)
+        return ('while', p.expresion, p.statement_list)
 
     # ══════════════════════════════════════════════════════════
     # FOR
     # ══════════════════════════════════════════════════════════
 
-    @_('FOR LPAREN ID ASSIGN expresion SEMICOLON condicion SEMICOLON ID INCREMENT RPAREN LBRACE statement_list RBRACE')
+    @_('FOR LPAREN ID ASSIGN expresion SEMICOLON expresion SEMICOLON ID INCREMENT RPAREN LBRACE statement_list RBRACE')
     def for_stat(self, p):
-        return ('for', p.ID0, p.expresion, p.condicion, ('incremento', p.ID1), p.statement_list)
+        return ('for', p.ID0, p.expresion0, p.expresion1,
+                ('incremento', p.ID1), p.statement_list)
 
-    @_('FOR LPAREN ID ASSIGN expresion SEMICOLON condicion SEMICOLON ID DECREMENT RPAREN LBRACE statement_list RBRACE')
+    @_('FOR LPAREN ID ASSIGN expresion SEMICOLON expresion SEMICOLON ID DECREMENT RPAREN LBRACE statement_list RBRACE')
     def for_stat(self, p):
-        return ('for', p.ID0, p.expresion, p.condicion, ('decremento', p.ID1), p.statement_list)
+        return ('for', p.ID0, p.expresion0, p.expresion1,
+                ('decremento', p.ID1), p.statement_list)
 
-    # ══════════════════════════════════════════════════════════
-    # CONDICIÓN
-    # ══════════════════════════════════════════════════════════
-
-    @_('condicion AND condicion')
-    def condicion(self, p):
-        return ('and', p.condicion0, p.condicion1)
-
-    @_('LPAREN condicion RPAREN')
-    def condicion(self, p):
-        return p.condicion
-
-    @_('expresion GTE expresion')
-    def condicion(self, p):
-        return ('>=', p.expresion0, p.expresion1)
-
-    @_('expresion GT expresion')
-    def condicion(self, p):
-        return ('>', p.expresion0, p.expresion1)
-
-    @_('expresion LT expresion')
-    def condicion(self, p):
-        return ('<', p.expresion0, p.expresion1)
+    @_('FOR LPAREN ID ASSIGN expresion SEMICOLON expresion SEMICOLON ID ASSIGN expresion RPAREN LBRACE statement_list RBRACE')
+    def for_stat(self, p):
+        return ('for', p.ID0, p.expresion0, p.expresion1,
+                ('asignacion', p.ID1, p.expresion2), p.statement_list)
 
     # ══════════════════════════════════════════════════════════
     # EXPRESIÓN
     # ══════════════════════════════════════════════════════════
+
+    @_('expresion OR expresion')
+    def expresion(self, p):
+        return ('or', p.expresion0, p.expresion1)
+
+    @_('expresion AND expresion')
+    def expresion(self, p):
+        return ('and', p.expresion0, p.expresion1)
+
+    @_('expresion EQ expresion')
+    def expresion(self, p):
+        return ('==', p.expresion0, p.expresion1)
+
+    @_('expresion NE expresion')
+    def expresion(self, p):
+        return ('!=', p.expresion0, p.expresion1)
+
+    @_('expresion GTE expresion')
+    def expresion(self, p):
+        return ('>=', p.expresion0, p.expresion1)
+
+    @_('expresion GT expresion')
+    def expresion(self, p):
+        return ('>', p.expresion0, p.expresion1)
+
+    @_('expresion LT expresion')
+    def expresion(self, p):
+        return ('<', p.expresion0, p.expresion1)
 
     @_('expresion PLUS termino')
     def expresion(self, p):
@@ -225,13 +291,61 @@ class CompilerParser(Parser):
     def expresion(self, p):
         return ('*', p.expresion, p.termino)
 
+    @_('expresion DIVIDE termino')
+    def expresion(self, p):
+        return ('/', p.expresion, p.termino)
+
+    @_('expresion MOD termino')
+    def expresion(self, p):
+        return ('%', p.expresion, p.termino)
+
     @_('termino')
     def expresion(self, p):
         return p.termino
+    
+    @_('RETURN expresion SEMICOLON')
+    def statement(self, p):
+        return ('return', p.expresion)
+
+    @_('RETURN SEMICOLON')
+    def statement(self, p):
+        return ('return', None)
+    
+    @_('expresion LTE expresion')
+    def expresion(self, p):
+        return ('<=', p.expresion0, p.expresion1)
+
+    # ══════════════════════════════════════════════════════════
+    # ARGUMENTOS
+    # ══════════════════════════════════════════════════════════
+
+    @_('lista_argumentos')
+    def argumentos(self, p):
+        return p.lista_argumentos
+
+    @_('')
+    def argumentos(self, p):
+        return []
+
+    @_('lista_argumentos COMMA expresion')
+    def lista_argumentos(self, p):
+        return p.lista_argumentos + [p.expresion]
+
+    @_('expresion')
+    def lista_argumentos(self, p):
+        return [p.expresion]
 
     # ══════════════════════════════════════════════════════════
     # TÉRMINO
     # ══════════════════════════════════════════════════════════
+    
+    @_('MINUS termino %prec UNARY_MINUS')
+    def termino(self, p):
+        return ('unario_menos', p.termino)
+
+    @_('ID LPAREN argumentos RPAREN')
+    def termino(self, p):
+        return ('llamada_funcion', p.ID, p.argumentos)
 
     @_('ID LBRACKET expresion RBRACKET')
     def termino(self, p):
@@ -252,6 +366,10 @@ class CompilerParser(Parser):
     @_('NUM_FLOAT')
     def termino(self, p):
         return ('num_float', p.NUM_FLOAT)
+    
+    @_('ID INCREMENT')
+    def termino(self, p):
+        return ('post_incremento', p.ID)
 
     # ══════════════════════════════════════════════════════════
     # MANEJO DE ERRORES

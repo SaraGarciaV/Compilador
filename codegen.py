@@ -1,70 +1,161 @@
-
+# ═════════════════════════════════════════════════════════════
 # GENERADOR DE CÓDIGO INTERMEDIO — CUÁDRUPLOS
+# ═════════════════════════════════════════════════════════════
 
 class GeneradorCodigo:
-    def __init__(self):
-        self.cuadruplos  = []   # lista de (op, op1, op2, res)
-        self._temp_count = 0    # contador de temporales AVAIL
-        self._pila_saltos = []  # pila de saltos ciegos
 
-    # AVAIL: banco de temporales
+    def __init__(self):
+        self.cuadruplos = []
+        self._temp_count = 0
+        self._pila_saltos = []
+
+        # funciones
+        self._tabla_funciones = {}
+
+        # pila de direcciones de retorno
+        self._pila_returns = []
+
+    # ═════════════════════════════════════════════════════════
+    # TEMPORALES
+    # ═════════════════════════════════════════════════════════
 
     def _nuevo_temp(self):
         self._temp_count += 1
         return f'T{self._temp_count}'
 
-    #  Emitir cuádruplo 
+    # ═════════════════════════════════════════════════════════
+    # EMITIR CUÁDRUPLO
+    # ═════════════════════════════════════════════════════════
+
     def _emitir(self, op, op1, op2, res):
         self.cuadruplos.append((op, op1, op2, res))
 
     def _cont(self):
-        """Número de la siguiente línea (base 1)."""
         return len(self.cuadruplos) + 1
 
     def _rellenar(self, indice, valor):
-        """Rellena el destino de un salto ciego."""
         op, op1, op2, _ = self.cuadruplos[indice]
-        self.cuadruplos[indice] = (op, op1, op2, valor)
+        self.cuadruplos[indice] = (
+            op,
+            op1,
+            op2,
+            valor
+        )
 
-    # Entrada principal
+    # ═════════════════════════════════════════════════════════
+    # ENTRADA PRINCIPAL
+    # ═════════════════════════════════════════════════════════
 
     def generar(self, ast):
         if ast is None:
-            print('[CodeGen] AST vacío, no se genera código.')
+            print('[CodeGen] AST vacío')
             return
-        _, nombre, var_list, bloque = ast
+
+        # ('programa', nombre, funciones, vars, bloque)
+        _, nombre, funciones, var_list, bloque = ast
+
+        # GOTO al main
+        idx_main = len(self.cuadruplos)
+        self._emitir('GOTO', '_', '_', '_')
+
+        # generar funciones primero
+        for funcion in funciones:
+            self._generar_funcion(funcion)
+
+        # rellenar salto al main
+        self._rellenar(idx_main, self._cont())
+
+        # generar main
         self._generar_bloque(bloque)
+
         self.imprimir()
 
-    #  Bloque 
+    # ═════════════════════════════════════════════════════════
+    # FUNCIONES
+    # ═════════════════════════════════════════════════════════
+
+    def _generar_funcion(self, funcion):
+        # ('funcion', nombre, parametros, bloque)
+        _, nombre, parametros, bloque = funcion
+
+        # guardar dirección inicial
+        self._tabla_funciones[nombre] = self._cont()
+
+        # etiqueta
+        self._emitir('LABEL', '_', '_', nombre)
+
+        # generar cuerpo
+        self._generar_bloque(bloque)
+
+        # retorno implícito
+        self._emitir('RETURN', '_', '_', '_')
+
+    # ═════════════════════════════════════════════════════════
+    # BLOQUE
+    # ═════════════════════════════════════════════════════════
+
     def _generar_bloque(self, bloque):
-        _, statements = bloque
+        # ('bloque', vars, statements)
+        _, var_list, statements = bloque
+
         for stmt in statements:
             self._generar_statement(stmt)
 
-    # Statements 
+    # ═════════════════════════════════════════════════════════
+    # STATEMENTS
+    # ═════════════════════════════════════════════════════════
 
     def _generar_statement(self, stmt):
         kind = stmt[0]
+
         if kind == 'asignacion':
             self._gen_asignacion(stmt)
+
         elif kind == 'asignacion_arr':
             self._gen_asignacion_arr(stmt)
+
         elif kind == 'decremento':
             self._emitir('-', stmt[1], '1', stmt[1])
+
         elif kind == 'incremento':
             self._emitir('+', stmt[1], '1', stmt[1])
+
         elif kind == 'write':
             res = self._gen_expresion(stmt[1])
             self._emitir('WRITE', res, '_', '_')
+
         elif kind == 'if':
             self._gen_if(stmt)
+
         elif kind == 'while':
             self._gen_while(stmt)
+
         elif kind == 'for':
             self._gen_for(stmt)
 
-    #  Asignación 
+        elif kind == 'return':
+            self._gen_return(stmt)
+
+    # ═════════════════════════════════════════════════════════
+    # RETURN
+    # ═════════════════════════════════════════════════════════
+
+    def _gen_return(self, stmt):
+        # ('return', expr)
+        _, expr = stmt
+
+        valor = self._gen_expresion(expr)
+        temp_return = self._nuevo_temp()
+
+        # guardar valor retorno
+        self._emitir('=', valor, '_', temp_return)
+
+        # regresar
+        self._emitir('RETURN', temp_return, '_', '_')
+
+    # ═════════════════════════════════════════════════════════
+    # ASIGNACIÓN
+    # ═════════════════════════════════════════════════════════
 
     def _gen_asignacion(self, stmt):
         _, nombre, expr = stmt
@@ -77,151 +168,185 @@ class GeneradorCodigo:
         val = self._gen_expresion(expr)
         self._emitir('=[', val, idx, nombre)
 
-    # Expresión — regresa temporal o valor 
+    # ═════════════════════════════════════════════════════════
+    # EXPRESIONES
+    # ═════════════════════════════════════════════════════════
 
     def _gen_expresion(self, expr):
         if expr is None:
             return '_'
+
         kind = expr[0]
 
         if kind == 'num_int':
             return str(expr[1])
+
         elif kind == 'num_float':
             return str(expr[1])
+
         elif kind == 'string':
             return f'"{expr[1]}"'
+
         elif kind == 'id':
             return expr[1]
+
         elif kind == 'acceso_arr':
             _, nombre, indice = expr
             idx = self._gen_expresion(indice)
             t = self._nuevo_temp()
-            self._emitir('[]=', nombre, idx, t)
+            # Cambiado a '=[]' para legibilidad
+            self._emitir('=[]', nombre, idx, t)
             return t
-        elif kind in ('+', '-', '*'):
+
+        elif kind == 'llamada_funcion':
+            return self._gen_llamada_funcion(expr)
+
+        elif kind in ('+', '-', '*', '/', '%', '==', '!=', '>', '<', '>=', '<=', 'and', 'or'):
             op1 = self._gen_expresion(expr[1])
             op2 = self._gen_expresion(expr[2])
-            t   = self._nuevo_temp()
-            self._emitir(kind, op1, op2, t)
+            t = self._nuevo_temp()
+            
+            # Ajuste estético para mayúsculas en operadores lógicos
+            op_code = kind.upper() if kind in ('and', 'or') else kind
+            self._emitir(op_code, op1, op2, t)
             return t
+
+        elif kind == 'unario_menos':
+            op = self._gen_expresion(expr[1])
+            t = self._nuevo_temp()
+            self._emitir('UMINUS', op, '_', t)
+            return t
+        
+        elif kind == 'post_incremento':
+            t = self._nuevo_temp()
+            self._emitir('+', expr[1], '1', t)
+            return t
+
         return '_'
 
-    #  Condición — regresa temporal booleano
+    # ═════════════════════════════════════════════════════════
+    # LLAMADA A FUNCIÓN
+    # ═════════════════════════════════════════════════════════
 
-    def _gen_condicion(self, cond):
-        kind = cond[0]
-        if kind == 'and':
-            t1 = self._gen_condicion(cond[1])
-            t2 = self._gen_condicion(cond[2])
-            t  = self._nuevo_temp()
-            self._emitir('AND', t1, t2, t)
-            return t
-        else:
-            # ('>=', expr1, expr2) | ('>', ...) | ('<', ...)
-            op1 = self._gen_expresion(cond[1])
-            op2 = self._gen_expresion(cond[2])
-            t   = self._nuevo_temp()
-            self._emitir(kind, op1, op2, t)
-            return t
+    def _gen_llamada_funcion(self, expr):
+        # ('llamada_funcion', nombre, argumentos)
+        _, nombre, argumentos = expr
 
-    #  IF 
+        # generar PARAM
+        for arg in argumentos:
+            val = self._gen_expresion(arg)
+            self._emitir('PARAM', val, '_', '_')
+
+        # guardar dirección retorno
+        dir_retorno = self._cont() + 2
+        self._pila_returns.append(dir_retorno)
+
+        # GOSUB
+        self._emitir(
+            'GOSUB',
+            nombre,
+            '_',
+            self._tabla_funciones.get(nombre, '_')
+        )
+
+        # recuperar valor retorno
+        temp = self._nuevo_temp()
+        self._emitir('GETRET', nombre, '_', temp)
+
+        return temp
+
+    # ═════════════════════════════════════════════════════════
+    # IF
+    # ═════════════════════════════════════════════════════════
+
     def _gen_if(self, stmt):
         _, condicion, then_stmts, else_stmts = stmt
 
-        # 1. Evaluar condición
-        t_cond = self._gen_condicion(condicion)
-
-        # 2. GOTOF ciego — no sabemos aún a dónde salta
+        t_cond = self._gen_expresion(condicion)
         idx_gotof = len(self.cuadruplos)
+
         self._emitir('GOTOF', t_cond, '_', '_')
 
-        # 3. Bloque THEN
         for s in then_stmts:
             self._generar_statement(s)
 
         if else_stmts:
-            # 4. GOTO ciego al final del else (salta el bloque else)
             idx_goto = len(self.cuadruplos)
             self._emitir('GOTO', '_', '_', '_')
-
-            # 5. Rellenar GOTOF al inicio del ELSE
             self._rellenar(idx_gotof, self._cont())
 
-            # 6. Bloque ELSE
             for s in else_stmts:
                 self._generar_statement(s)
 
-            # 7. Rellenar GOTO al final
             self._rellenar(idx_goto, self._cont())
         else:
-            # Sin else: rellenar GOTOF al siguiente statement
             self._rellenar(idx_gotof, self._cont())
 
-    # WHILE 
+    # ═════════════════════════════════════════════════════════
+    # WHILE
+    # ═════════════════════════════════════════════════════════
 
     def _gen_while(self, stmt):
         _, condicion, stmts = stmt
 
-        # 1. Guardar posición de inicio (para el GOTO de regreso)
         inicio = self._cont()
-
-        # 2. Evaluar condición
-        t_cond = self._gen_condicion(condicion)
-
-        # 3. GOTOF ciego — salto al final si condición falsa
+        t_cond = self._gen_expresion(condicion)
         idx_gotof = len(self.cuadruplos)
+
         self._emitir('GOTOF', t_cond, '_', '_')
 
-        # 4. Cuerpo del while
         for s in stmts:
             self._generar_statement(s)
 
-        # 5. GOTO incondicional de regreso al inicio
         self._emitir('GOTO', '_', '_', inicio)
-
-        # 6. Rellenar GOTOF al siguiente statement
         self._rellenar(idx_gotof, self._cont())
 
-    #  FOR
+    # ═════════════════════════════════════════════════════════
+    # FOR
+    # ═════════════════════════════════════════════════════════
+
     def _gen_for(self, stmt):
         _, nombre, inicio, condicion, avance, stmts = stmt
 
-        # 1. Inicializar variable de control
         val_inicio = self._gen_expresion(inicio)
         self._emitir('=', val_inicio, '_', nombre)
 
-        # 2. Guardar posición de evaluación de condición
         pos_cond = self._cont()
-
-        # 3. Evaluar condición
-        t_cond = self._gen_condicion(condicion)
-
-        # 4. GOTOF ciego
+        t_cond = self._gen_expresion(condicion)
         idx_gotof = len(self.cuadruplos)
+
         self._emitir('GOTOF', t_cond, '_', '_')
 
-        # 5. Cuerpo del for
         for s in stmts:
             self._generar_statement(s)
 
-        # 6. Avance (++ o --)
         if avance[0] == 'incremento':
             self._emitir('+', avance[1], '1', avance[1])
-        else:
+        elif avance[0] == 'decremento':
             self._emitir('-', avance[1], '1', avance[1])
+        elif avance[0] == 'asignacion':
+            res = self._gen_expresion(avance[2])
+            self._emitir('=', res, '_', avance[1])
 
-        # 7. GOTO de regreso a la condición
         self._emitir('GOTO', '_', '_', pos_cond)
-
-        # 8. Rellenar GOTOF
         self._rellenar(idx_gotof, self._cont())
 
-    #  Imprimir cuádruplos 
+    # ═════════════════════════════════════════════════════════
+    # IMPRIMIR
+    # ═════════════════════════════════════════════════════════
 
     def imprimir(self):
         print('\n── Cuádruplos ─────────────────────────────────────')
-        print(f'{"#":<5} {"Op":<8} {"Op1":<10} {"Op2":<10} {"Res"}')
-        print('─' * 50)
+        print(f'{"#":<5} {"Op":<10} {"Op1":<10} {"Op2":<10} {"Res"}')
+        print('─' * 60)
+
         for i, (op, op1, op2, res) in enumerate(self.cuadruplos, 1):
-            print(f'{i:<5} {str(op):<8} {str(op1):<10} {str(op2):<10} {res}')
-        print('─' * 50)
+            print(
+                f'{i:<5} '
+                f'{str(op):<10} '
+                f'{str(op1):<10} '
+                f'{str(op2):<10} '
+                f'{res}'
+            )
+
+        print('─' * 60)
